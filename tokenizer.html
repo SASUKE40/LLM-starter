@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rust Tokenizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #1a1a1a; }
+  header { padding: 24px 32px 16px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+  header h1 { font-size: 28px; font-weight: 700; }
+  header p { color: #6b7280; font-size: 14px; margin-top: 4px; }
+  .container { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 90px); }
+  .panel { padding: 20px 24px; overflow-y: auto; }
+  .panel-left { background: #fff; border-right: 1px solid #e5e7eb; }
+  .panel-right { background: #f8f9fa; }
+  .panel-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 8px; }
+  textarea {
+    width: 100%; height: calc(100% - 30px); font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px; border: 1px solid #d1d5db; border-radius: 8px;
+    resize: none; background: #fafafa; color: #1a1a1a; outline: none; tab-size: 4;
+  }
+  textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+  .stats-bar {
+    display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .stat-card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; min-width: 120px;
+  }
+  .stat-card .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+  .stat-card .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .section { margin-bottom: 20px; }
+  .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 8px; }
+  .token-view {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; line-height: 1.8;
+    white-space: pre-wrap; word-break: break-all; min-height: 80px;
+  }
+  .token-view .tok {
+    border-radius: 3px; padding: 1px 0; cursor: default; position: relative;
+    border-bottom: 2px solid transparent; transition: filter 0.1s;
+  }
+  .token-view .tok:hover { filter: brightness(0.85); }
+  .token-ids {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; line-height: 1.6;
+    color: #4b5563; word-break: break-all; min-height: 40px;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #4b5563; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); }
+  .ws-toggle { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; color: #4b5563; cursor: pointer; user-select: none; }
+  .ws-toggle input { cursor: pointer; }
+
+  /* Token colors - a palette similar to tiktokenizer */
+  .tok-keyword    { background: #dbeafe; color: #1e40af; }
+  .tok-ident      { background: #fef3c7; color: #92400e; }
+  .tok-int        { background: #d1fae5; color: #065f46; }
+  .tok-float      { background: #d1fae5; color: #065f46; }
+  .tok-string     { background: #fce7f3; color: #9d174d; }
+  .tok-char       { background: #fce7f3; color: #9d174d; }
+  .tok-lifetime   { background: #e0e7ff; color: #3730a3; }
+  .tok-operator   { background: #ede9fe; color: #5b21b6; }
+  .tok-delimiter  { background: #f3e8ff; color: #7c3aed; }
+  .tok-punct      { background: #e5e7eb; color: #374151; }
+  .tok-comment    { background: #f0fdf4; color: #166534; }
+  .tok-doccomment { background: #ecfdf5; color: #047857; }
+  .tok-whitespace { background: rgba(0,0,0,0.04); color: #9ca3af; }
+  .tok-unknown    { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Rust Tokenizer</h1>
+  <p>Visualize how Rust source code is broken into lexical tokens</p>
+</header>
+
+<div class="container">
+  <div class="panel panel-left">
+    <div class="panel-label">Rust Source Code</div>
+    <textarea id="input" spellcheck="false">use std::collections::HashMap;
+
+/// A simple key-value store.
+pub struct Store&lt;V&gt; {
+    data: HashMap&lt;String, V&gt;,
+}
+
+impl&lt;V: Clone&gt; Store&lt;V&gt; {
+    pub fn new() -&gt; Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
+
+    /// Insert a value, returning the old one if present.
+    pub fn insert(&amp;mut self, key: &amp;str, value: V) -&gt; Option&lt;V&gt; {
+        self.data.insert(key.to_string(), value)
+    }
+
+    pub fn get(&amp;self, key: &amp;str) -&gt; Option&lt;&amp;V&gt; {
+        self.data.get(key)
+    }
+}
+
+fn main() {
+    let mut store = Store::new();
+    store.insert("hello", 42);
+    let val = store.get("hello");
+    // Print the result
+    if let Some(v) = val {
+        println!("value = {v}");
+    }
+    let bits = 0b1010_1100;
+    let hex = 0xFF;
+    let pi = 3.14159f64;
+    let ch = 'A';
+    let escaped = "line1\nline2";
+    let _unused = bits + hex;
+    assert!(pi > 3.0, "pi should be > 3");
+    println!("{ch} {escaped} {_unused}");
+}</textarea>
+  </div>
+  <div class="panel panel-right">
+    <div class="stats-bar" id="stats"></div>
+    <div class="legend" id="legend"></div>
+    <div class="section">
+      <div class="section-title">Tokens</div>
+      <div class="token-view" id="token-view"></div>
+      <label class="ws-toggle"><input type="checkbox" id="show-ws"> Show whitespace</label>
+    </div>
+    <div class="section" style="margin-top: 16px;">
+      <div class="section-title">Token IDs (index)</div>
+      <div class="token-ids" id="token-ids"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Rust Lexer (ported from src/lexer.rs) ──
+
+const KEYWORDS = new Set([
+  "as","async","await","break","const","continue","crate","dyn","else","enum",
+  "extern","false","fn","for","if","impl","in","let","loop","match","mod","move",
+  "mut","pub","ref","return","self","Self","static","struct","super","trait","true",
+  "type","union","unsafe","use","where","while","yield","abstract","become","box",
+  "do","final","macro","override","priv","try","typeof","unsized","virtual",
+]);
+
+const TokenKind = {
+  Keyword: "Keyword", Ident: "Ident", IntLiteral: "Int", FloatLiteral: "Float",
+  StringLiteral: "String", CharLiteral: "Char", Lifetime: "Lifetime",
+  Operator: "Operator", Delimiter: "Delimiter", Punctuation: "Punct",
+  LineComment: "Comment", BlockComment: "Comment", DocComment: "DocComment",
+  Whitespace: "Whitespace", Unknown: "Unknown",
+};
+
+const KIND_CSS = {
+  Keyword: "tok-keyword", Ident: "tok-ident", Int: "tok-int", Float: "tok-float",
+  String: "tok-string", Char: "tok-char", Lifetime: "tok-lifetime",
+  Operator: "tok-operator", Delimiter: "tok-delimiter", Punct: "tok-punct",
+  Comment: "tok-comment", DocComment: "tok-doccomment",
+  Whitespace: "tok-whitespace", Unknown: "tok-unknown",
+};
+
+const KIND_LABEL = {
+  Keyword: "Keyword", Ident: "Identifier", Int: "Integer", Float: "Float",
+  String: "String", Char: "Char", Lifetime: "Lifetime",
+  Operator: "Operator", Delimiter: "Delimiter", Punct: "Punctuation",
+  Comment: "Comment", DocComment: "Doc Comment",
+  Whitespace: "Whitespace", Unknown: "Unknown",
+};
+
+class Lexer {
+  constructor(src) {
+    this.src = [...src];
+    this.pos = 0;
+    this.line = 1;
+    this.col = 1;
+  }
+  peek(offset = 0) { return this.src[this.pos + offset]; }
+  advance() {
+    const ch = this.src[this.pos++];
+    if (ch === '\n') { this.line++; this.col = 1; } else { this.col++; }
+    return ch;
+  }
+  makeToken(kind, start, startLine, startCol) {
+    return { kind, text: this.src.slice(start, this.pos).join(''), line: startLine, col: startCol, start, end: this.pos };
+  }
+  tokenize() {
+    const tokens = [];
+    while (this.pos < this.src.length) tokens.push(this.nextToken());
+    return tokens;
+  }
+  lexIdentRest(start, sl, sc) {
+    while (this.pos < this.src.length && /[a-zA-Z0-9_]/.test(this.peek())) this.advance();
+    const text = this.src.slice(start, this.pos).join('');
+    return { kind: KEYWORDS.has(text) ? TokenKind.Keyword : TokenKind.Ident, text, line: sl, col: sc, start, end: this.pos };
+  }
+  nextToken() {
+    const start = this.pos, sl = this.line, sc = this.col;
+    const ch = this.advance();
+
+    // Whitespace
+    if (/\s/.test(ch)) {
+      while (this.pos < this.src.length && /\s/.test(this.peek())) this.advance();
+      return this.makeToken(TokenKind.Whitespace, start, sl, sc);
+    }
+    // Comments
+    if (ch === '/') {
+      if (this.peek() === '/') {
+        this.advance();
+        const kind = (this.peek() === '/' || this.peek() === '!') ? TokenKind.DocComment : TokenKind.LineComment;
+        while (this.pos < this.src.length && this.peek() !== '\n') this.advance();
+        return this.makeToken(kind, start, sl, sc);
+      }
+      if (this.peek() === '*') {
+        this.advance();
+        const kind = (this.peek() === '*' || this.peek() === '!') ? TokenKind.DocComment : TokenKind.BlockComment;
+        let depth = 1;
+        while (depth > 0 && this.pos < this.src.length) {
+          if (this.peek() === '/' && this.peek(1) === '*') { this.advance(); this.advance(); depth++; }
+          else if (this.peek() === '*' && this.peek(1) === '/') { this.advance(); this.advance(); depth--; }
+          else this.advance();
+        }
+        return this.makeToken(kind, start, sl, sc);
+      }
+      if (this.peek() === '=') this.advance();
+      return this.makeToken(TokenKind.Operator, start, sl, sc);
+    }
+    // String literals
+    if (ch === '"') {
+      while (this.pos < this.src.length) {
+        if (this.peek() === '\\') { this.advance(); if (this.pos < this.src.length) this.advance(); }
+        else if (this.peek() === '"') { this.advance(); break; }
+        else this.advance();
+      }
+      return this.makeToken(TokenKind.StringLiteral, start, sl, sc);
+    }
+    // Char literal
+    if (ch === "'" && (this.peek(1) === "'" || (this.peek() === '\\' && this.peek(2) === "'"))) {
+      if (this.peek() === '\\') { this.advance(); this.advance(); } else { this.advance(); }
+      if (this.peek() === "'") this.advance();
+      return this.makeToken(TokenKind.CharLiteral, start, sl, sc);
+    }
+    // Lifetime
+    if (ch === "'") {
+      if (this.pos < this.src.length && /[a-zA-Z_]/.test(this.peek())) {
+        while (this.pos < this.src.length && /[a-zA-Z0-9_]/.test(this.peek())) this.advance();
+        return this.makeToken(TokenKind.Lifetime, start, sl, sc);
+      }
+      return this.makeToken(TokenKind.Punctuation, start, sl, sc);
+    }
+    // Raw strings
+    if (ch === 'r' && (this.peek() === '"' || this.peek() === '#')) {
+      let hashes = 0;
+      while (this.peek() === '#') { this.advance(); hashes++; }
+      if (this.peek() === '"') {
+        this.advance();
+        outer: while (this.pos < this.src.length) {
+          if (this.peek() === '"') {
+            this.advance(); let ch2 = 0;
+            while (ch2 < hashes && this.peek() === '#') { this.advance(); ch2++; }
+            if (ch2 === hashes) break outer;
+          } else this.advance();
+        }
+        return this.makeToken(TokenKind.StringLiteral, start, sl, sc);
+      }
+      return this.lexIdentRest(start, sl, sc);
+    }
+    // Byte strings
+    if (ch === 'b' && (this.peek() === '"' || this.peek() === "'")) {
+      const q = this.advance();
+      while (this.pos < this.src.length) {
+        if (this.peek() === '\\') { this.advance(); if (this.pos < this.src.length) this.advance(); }
+        else if (this.peek() === q) { this.advance(); break; }
+        else this.advance();
+      }
+      return this.makeToken(q === '"' ? TokenKind.StringLiteral : TokenKind.CharLiteral, start, sl, sc);
+    }
+    // Numbers
+    if (/[0-9]/.test(ch)) {
+      let isFloat = false;
+      if (ch === '0' && this.peek() && 'xXoObB'.includes(this.peek())) {
+        const base = this.advance().toLowerCase();
+        const pat = base === 'x' ? /[0-9a-fA-F_]/ : base === 'o' ? /[0-7_]/ : /[01_]/;
+        while (this.pos < this.src.length && pat.test(this.peek())) this.advance();
+        return this.makeToken(TokenKind.IntLiteral, start, sl, sc);
+      }
+      while (this.pos < this.src.length && /[0-9_]/.test(this.peek())) this.advance();
+      if (this.peek() === '.' && this.peek(1) && /[0-9]/.test(this.peek(1))) {
+        isFloat = true; this.advance();
+        while (this.pos < this.src.length && /[0-9_]/.test(this.peek())) this.advance();
+      }
+      if (this.peek() && /[eE]/.test(this.peek())) {
+        isFloat = true; this.advance();
+        if (this.peek() && /[+\-]/.test(this.peek())) this.advance();
+        while (this.pos < this.src.length && /[0-9_]/.test(this.peek())) this.advance();
+      }
+      if (this.peek() && /[uif]/.test(this.peek())) {
+        const sc2 = this.pos; this.advance();
+        while (this.pos < this.src.length && /[0-9]/.test(this.peek())) this.advance();
+        if (this.src[sc2] === 'f') isFloat = true;
+      }
+      return this.makeToken(isFloat ? TokenKind.FloatLiteral : TokenKind.IntLiteral, start, sl, sc);
+    }
+    // Identifiers / keywords
+    if (/[a-zA-Z_]/.test(ch)) return this.lexIdentRest(start, sl, sc);
+    // Delimiters
+    if ('(){}[]'.includes(ch)) return this.makeToken(TokenKind.Delimiter, start, sl, sc);
+    // Operators
+    if (ch === '=') { if (this.peek() === '=' || this.peek() === '>') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '!') { if (this.peek() === '=') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '<') { if (this.peek() === '=') this.advance(); else if (this.peek() === '<') { this.advance(); if (this.peek() === '=') this.advance(); } return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '>') { if (this.peek() === '=') this.advance(); else if (this.peek() === '>') { this.advance(); if (this.peek() === '=') this.advance(); } return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if ('*%^'.includes(ch)) { if (this.peek() === '=') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '+') { if (this.peek() === '=') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '-') { if (this.peek() === '=' || this.peek() === '>') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '&') { if (this.peek() === '&' || this.peek() === '=') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '|') { if (this.peek() === '|' || this.peek() === '=') this.advance(); return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === '.') { if (this.peek() === '.') { this.advance(); if (this.peek() === '=' || this.peek() === '.') this.advance(); } return this.makeToken(TokenKind.Operator, start, sl, sc); }
+    if (ch === ':') { if (this.peek() === ':') this.advance(); return this.makeToken(TokenKind.Punctuation, start, sl, sc); }
+    if (';,#$@?~'.includes(ch)) return this.makeToken(TokenKind.Punctuation, start, sl, sc);
+    return this.makeToken(TokenKind.Unknown, start, sl, sc);
+  }
+}
+
+// ── Rendering ──
+
+const inputEl = document.getElementById('input');
+const statsEl = document.getElementById('stats');
+const legendEl = document.getElementById('legend');
+const tokenViewEl = document.getElementById('token-view');
+const tokenIdsEl = document.getElementById('token-ids');
+const showWsEl = document.getElementById('show-ws');
+
+// Fix textarea HTML entities on load
+inputEl.value = inputEl.value.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function render() {
+  const source = inputEl.value;
+  const lexer = new Lexer(source);
+  const tokens = lexer.tokenize();
+  const showWs = showWsEl.checked;
+
+  // Stats
+  const nonWs = tokens.filter(t => t.kind !== TokenKind.Whitespace);
+  const counts = {};
+  for (const t of nonWs) counts[t.kind] = (counts[t.kind] || 0) + 1;
+
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="label">Token count</div><div class="value">${nonWs.length}</div></div>
+    <div class="stat-card"><div class="label">Characters</div><div class="value">${source.length}</div></div>
+    <div class="stat-card"><div class="label">Lines</div><div class="value">${source.split('\n').length}</div></div>
+    <div class="stat-card"><div class="label">Unique kinds</div><div class="value">${Object.keys(counts).length}</div></div>
+  `;
+
+  // Legend
+  const seenKinds = [];
+  for (const t of tokens) {
+    if (t.kind === TokenKind.Whitespace) continue;
+    if (!seenKinds.includes(t.kind)) seenKinds.push(t.kind);
+  }
+  legendEl.innerHTML = seenKinds.map(k => {
+    const css = KIND_CSS[k] || 'tok-unknown';
+    const label = KIND_LABEL[k] || k;
+    return `<div class="legend-item"><div class="legend-swatch ${css}"></div>${label}</div>`;
+  }).join('');
+
+  // Token view
+  let html = '';
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.kind === TokenKind.Whitespace && !showWs) {
+      html += escapeHtml(t.text);
+      continue;
+    }
+    const css = KIND_CSS[t.kind] || 'tok-unknown';
+    let display = escapeHtml(t.text);
+    if (t.kind === TokenKind.Whitespace) {
+      display = t.text.replace(/ /g, '\u00b7').replace(/\t/g, '\u2192\t').replace(/\n/g, '\u21b5\n');
+      display = escapeHtml(display).replace(/\u00b7/g, '&middot;').replace(/\u2192/g, '&#x2192;').replace(/\u21b5/g, '&#x21b5;');
+    }
+    html += `<span class="tok ${css}" title="${t.kind} [${t.line}:${t.col}]">${display}</span>`;
+  }
+  tokenViewEl.innerHTML = html;
+
+  // Token IDs
+  tokenIdsEl.textContent = nonWs.map((_, i) => i).join(', ');
+}
+
+inputEl.addEventListener('input', render);
+showWsEl.addEventListener('change', render);
+
+// Handle tab key in textarea
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = inputEl.selectionStart, end = inputEl.selectionEnd;
+    inputEl.value = inputEl.value.substring(0, start) + '    ' + inputEl.value.substring(end);
+    inputEl.selectionStart = inputEl.selectionEnd = start + 4;
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
