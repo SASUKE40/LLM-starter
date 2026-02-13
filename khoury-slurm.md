@@ -7,7 +7,7 @@
 Request an interactive shell with a GPU:
 
 ```bash
-srun --partition=sharing --nodes=1 --pty --gres=gpu:h100:1 --ntasks=1 --time=30:00:00 /bin/bash
+srun --partition=sharing --nodes=1 --pty --gres=gpu:h100:1 --ntasks=1 --mem=80GB --time=1:00:00 /bin/bash
 ```
 
 | Flag | Meaning |
