@@ -35,3 +35,9 @@ scancel -u $USER
 # Release a held job
 scontrol release <job_id>
 ```
+
+## Research run
+
+```bash
+torchrun --standalone --nproc_per_node=1 -m scripts.base_train --     --depth=12     --run="d12-single"     --model-tag="d12"
+```
