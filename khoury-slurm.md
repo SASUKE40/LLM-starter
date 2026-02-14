@@ -7,7 +7,7 @@
 Request an interactive shell with a GPU:
 
 ```bash
-srun --partition=sharing --nodes=1 --pty --gres=gpu:h100:1 --ntasks=1 --mem=80GB --time=1:00:00 /bin/bash
+srun --partition=sharing --nodes=1 --pty --gres=gpu:h100:1 --ntasks=1 --mem=80GB --time=4:00:00 /bin/bash
 ```
 
 | Flag | Meaning |
@@ -17,7 +17,8 @@ srun --partition=sharing --nodes=1 --pty --gres=gpu:h100:1 --ntasks=1 --mem=80GB
 | `--pty` | Allocate a pseudo-terminal (interactive) |
 | `--gres=gpu:h100:1` | Request 1x H100 GPU (change model/count as needed) |
 | `--ntasks=1` | One task |
-| `--time=30:00:00` | Wall-time limit of 30 hours |
+| `--mem=80GB` | Allocated Memory |
+| `--time=40:00:00` | Wall-time limit of 4 hours |
 
 > **Tip:** Replace `h100` with `a100`, `v100-sxm2`, `l40s`, etc. to request a different GPU type.
 
@@ -40,4 +41,8 @@ scontrol release <job_id>
 
 ```bash
 torchrun --standalone --nproc_per_node=1 -m scripts.base_train --     --depth=12     --run="d12-single"     --model-tag="d12"
+```
+
+```bash
+scontrol update jobid=<JOBID> TimeLimit=<NEW_TIME>
 ```
