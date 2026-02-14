@@ -46,3 +46,7 @@ torchrun --standalone --nproc_per_node=1 -m scripts.base_train --     --depth=12
 ```bash
 scontrol update jobid=<JOBID> TimeLimit=<NEW_TIME>
 ```
+
+```bash
+python -m scripts.chat_cli -i base -g d12
+```
