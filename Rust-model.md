@@ -61,3 +61,30 @@ Non-embedding parameters: **440,546,304 ≈ 0.44B**
 - **No biases**: removed from all attention & MLP projections
 - **Weight tying**: LM head reuses token embedding, saves $Vd$ = 155.6M params
 - **QK-Norm**: stabilizes training by normalizing Q and K per head
+
+# Pre-Training Stages
+
+Stage 1: General Knowledge
+
+171GB general text tokens
+
+English focused
+
+https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu
+
+
+Stage 2: Reasoning and Code
+
+3.2GB rust code tokens
+
+rust_ds = load_dataset(
+    "bigcode/the-stack-dedup",
+    data_dir="data/rust",
+    split="train",
+)
+
+https://huggingface.co/datasets/bigcode/the-stack-dedup/viewer
+
+Stage 3: Long Context
+
+Context Extension to 32,768
