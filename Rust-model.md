@@ -1,4 +1,4 @@
-# Our 0.6B Model (Qwen3 Architecture)
+# Rust 0.6B Model (Qwen3 Architecture)
 
 ## Model Specs
 
